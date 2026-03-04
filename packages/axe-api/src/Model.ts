@@ -4,7 +4,6 @@ import {
   IRelation,
   IMethodBaseConfig,
   IQueryLimitConfig,
-  IHandlerBaseMiddleware,
   IHandlerBasedTransactionConfig,
   ICacheConfiguration,
   IHandlerBasedCacheConfig,
@@ -12,11 +11,15 @@ import {
   IHasManyOptions,
 } from "./Interfaces";
 import { Relationships, HandlerTypes, HttpMethods } from "./Enums";
-import { DEFAULT_HANDLERS, DEFAULT_HASH_MANY_OPTIONS } from "./constants";
+import { DEFAULT_HANDLERS, RESERVED_MODEL_MEMBERS } from "./constants";
 import { ModelMiddleware, AxeFunction, ModelValidation } from "./Types";
 import { getParentIndexQuery } from "./Handlers/Helpers";
-
+import { BelongsTo, HasMany, HasOne } from "./Relations";
+import { IoCService } from "./Services";
 class Model {
+  private _table?: string;
+  private _foreignKey?: string;
+  private _relations?: Record<string, IRelation>;
   /**
    * The primary key of the model. By default, it is `id`. But you can choose
    * another name like `uuid`.
@@ -32,6 +35,13 @@ class Model {
     return "id";
   }
 
+  get foreignKey(): string {
+    if (!this._foreignKey) {
+      this._foreignKey = `${snakeCase(pluralize.singular(this.table))}_id`;
+    }
+    return this._foreignKey;
+  }
+
   /**
    * The database table name of the model. By default, Axe API uses the plural
    * version of the model(`User.ts` => `users`) name. You can specify a custom
@@ -44,8 +54,12 @@ class Model {
    * @type {string}
    * @tutorial https://axe-api.com/reference/model-table.html
    */
+
   get table(): string {
-    return pluralize(snakeCase(this.constructor.name));
+    if (!this._table) {
+      this._table = pluralize(snakeCase(this.constructor.name));
+    }
+    return this._table;
   }
 
   /**
@@ -266,7 +280,7 @@ class Model {
    * full-text search feature.
    *
    * @example
-   *  get saerch() {
+   *  get search() {
    *    return ["name", "surname", "email"]
    * }
    * @type {string[] | null>}
@@ -283,33 +297,22 @@ class Model {
    *  get relationName() {
    *    return this.hasMany("Post", "id", "user_id")
    * }
-   * @type {Array<IQueryLimitConfig[]>}
+   * @type {HasMany}
    * @tutorial https://axe-api.com/learn/routing.html#model-relations
    */
   hasMany(
     relatedModel: string,
-    primaryKey = "id",
-    foreignKey = "",
+    primaryKey?: string,
+    foreignKey?: string,
     options?: Partial<IHasManyOptions>,
-  ): IRelation {
-    if (!foreignKey) {
-      const currentModelName = pluralize.singular(
-        this.constructor.name.toLowerCase(),
-      );
-      foreignKey = `${currentModelName}_id`;
-    }
-
-    return {
-      name: relatedModel,
-      type: Relationships.HAS_MANY,
-      model: relatedModel,
-      primaryKey,
-      foreignKey,
-      options: {
-        ...DEFAULT_HASH_MANY_OPTIONS,
-        ...options,
-      },
-    };
+  ): HasMany {
+    const model = IoCService.use<Model>(relatedModel) as Model;
+    return new HasMany(
+      model,
+      primaryKey ?? this.primaryKey,
+      model.foreignKey ?? foreignKey,
+      options,
+    );
   }
 
   /**
@@ -319,22 +322,20 @@ class Model {
    *  get relationName() {
    *    return this.hasOne("User", "id", "user_id")
    * }
-   * @type {Array<IQueryLimitConfig[]>}
+   * @type {HasOne}
    * @tutorial https://axe-api.com/learn/routing.html#model-relations
    */
-  hasOne(relatedModel: string, primaryKey = "id", foreignKey = ""): IRelation {
-    if (foreignKey === "") {
-      foreignKey = `${pluralize.singular(relatedModel.toLowerCase())}_id`;
-    }
-
-    return {
-      name: relatedModel,
-      type: Relationships.HAS_ONE,
-      model: relatedModel,
-      primaryKey,
-      foreignKey,
-      options: DEFAULT_HASH_MANY_OPTIONS,
-    };
+  hasOne(
+    relatedModel: string,
+    primaryKey: string,
+    foreignKey?: string,
+  ): HasOne {
+    const model = IoCService.use<Model>(relatedModel) as Model;
+    return new HasOne(
+      model,
+      primaryKey ?? this.primaryKey,
+      model.foreignKey ?? foreignKey,
+    );
   }
 
   /**
@@ -344,76 +345,104 @@ class Model {
    *  get relationName() {
    *    return this.belongsTo("User", "user_id", "id")
    * }
-   * @type {Array<IQueryLimitConfig[]>}
+   * @type {BelongsTo}
    * @tutorial https://axe-api.com/learn/routing.html#model-relations
    */
-  belongsTo(relatedModel: string, primaryKey: string, foreignKey: string) {
-    return this.hasOne(relatedModel, foreignKey, primaryKey);
+  belongsTo(
+    relatedModel: string,
+    primaryKey: string,
+    foreignKey: string,
+  ): BelongsTo {
+    const model = IoCService.use<Model>(relatedModel) as Model;
+    return new BelongsTo(
+      model,
+      primaryKey ?? this.primaryKey,
+      foreignKey ?? model.foreignKey,
+    );
   }
 
   getFillableFields(methodType: HttpMethods): string[] {
-    if (this.fillable === null) {
-      return [];
-    }
+    if (!this.fillable) return [];
 
     if (Array.isArray(this.fillable)) {
       return this.fillable;
     }
 
-    const values: IMethodBaseConfig<string[]> = this.fillable;
-    switch (methodType) {
-      case HttpMethods.PATCH:
-        return values.PATCH ?? [];
-      case HttpMethods.POST:
-        return values.POST ?? [];
-      case HttpMethods.PUT:
-        return values.PUT ?? [];
-      default:
-        return [];
+    if (
+      methodType === HttpMethods.POST ||
+      methodType === HttpMethods.PUT ||
+      methodType === HttpMethods.PATCH
+    ) {
+      return this.fillable[methodType] ?? [];
     }
+
+    return [];
   }
 
   getValidationRules(methodType: HttpMethods): ModelValidation | null {
-    if (this.hasStringValue()) {
-      return this.validations as ModelValidation;
+    const validations = this.validations;
+
+    if (this.isSimpleValidation()) {
+      return validations as ModelValidation;
     }
 
-    const values: IMethodBaseConfig<ModelValidation> = this.validations;
-
-    switch (methodType) {
-      case HttpMethods.POST:
-        return values.POST ?? null;
-      case HttpMethods.PATCH:
-      case HttpMethods.PUT:
-        return values.PUT ?? null;
-      default:
-        return null;
+    if (
+      methodType === HttpMethods.POST ||
+      methodType === HttpMethods.PUT ||
+      methodType === HttpMethods.PATCH
+    ) {
+      return (
+        (validations as IMethodBaseConfig<ModelValidation>)[methodType] ?? null
+      );
     }
+
+    return null;
   }
 
   getMiddlewares(handlerType: HandlerTypes): AxeFunction[] {
-    const results: AxeFunction[] = [];
-    const middlewares = this.middlewares;
+    const middlewares = Array.isArray(this.middlewares)
+      ? this.middlewares
+      : [this.middlewares];
 
-    if (Array.isArray(middlewares)) {
-      (middlewares as Array<any>).forEach((item) => {
-        if (item?.handler) {
-          const handlerBasedMiddlewares = item as IHandlerBaseMiddleware;
-          if (handlerBasedMiddlewares.handler.includes(handlerType)) {
-            results.push(handlerBasedMiddlewares.middleware);
-          }
-        } else {
-          results.push(item);
-        }
-      });
-    } else {
-      const handlerBasedMiddlewares = middlewares as IHandlerBaseMiddleware;
-      if (handlerBasedMiddlewares.handler.includes(handlerType)) {
-        results.push(handlerBasedMiddlewares.middleware);
+    return middlewares.filter(Boolean).flatMap((item: any) => {
+      if (item.handler) {
+        return item.handler.includes(handlerType) ? [item.middleware] : [];
+      }
+      return [item];
+    });
+  }
+
+  getRelations(): Record<string, IRelation> {
+    if (this._relations) {
+      return this._relations;
+    }
+
+    const relations: Record<string, IRelation> = {};
+
+    const proto = Object.getPrototypeOf(this);
+    const propertyNames = Object.getOwnPropertyNames(proto);
+
+    for (const name of propertyNames) {
+      if (RESERVED_MODEL_MEMBERS.has(name)) continue;
+
+      const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+      if (!descriptor?.get) continue;
+
+      const value = (this as any)[name];
+
+      if (
+        value &&
+        typeof value === "object" &&
+        "type" in value &&
+        Object.values(Relationships).includes(value.type)
+      ) {
+        relations[name] = value;
       }
     }
 
-    return results;
+    this._relations = relations;
+
+    return relations;
   }
 
   /**
@@ -423,7 +452,7 @@ class Model {
    * By default, Axe API uses a simple full-text search.
    *
    * @example
-   *  get getSearchQuery(params: IElasticSearchParameters) {
+   *  getSearchQuery(params: IElasticSearchParameters) {
    *    return {
    *      // your query
    *    }
@@ -476,17 +505,21 @@ class Model {
     };
   }
 
-  private hasStringValue() {
-    const tester: Record<string, any> = this.validations;
-    let status = false;
+  /**
+   * Determines whether `validations` is a flat ModelValidation object
+   * (as opposed to a method-based IMethodBaseConfig<ModelValidation>).
+   *
+   * A flat validation object has string or object rule values directly on its
+   * keys, whereas a method-based config uses HTTP method names (POST, PUT, PATCH)
+   * as its top-level keys.
+   */
+  private isSimpleValidation(): boolean {
+    const HTTP_METHOD_KEYS = new Set(["POST", "PUT", "PATCH"]);
+    const keys = Object.keys(this.validations);
 
-    for (const key of Object.keys(tester)) {
-      if (typeof tester[key] === "string") {
-        status = true;
-      }
-    }
+    if (keys.length === 0) return true;
 
-    return status;
+    return !keys.some((key) => HTTP_METHOD_KEYS.has(key));
   }
 }
 

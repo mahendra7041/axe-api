@@ -34,6 +34,7 @@ import GetCachePhase from "./Phases/GetCachePhase";
 import CacheTagCleanPhase from "./Phases/CacheTagCleanPhase";
 import URLSearchParamPhase from "./Phases/URLSearchParamPhase";
 import { defaultCacheKeyFunction } from "./Handlers/Helpers";
+import Model from "./Model";
 
 export const RESERVED_KEYWORDS: string[] = [
   "force",
@@ -58,40 +59,9 @@ export const DEFAULT_HANDLERS: HandlerTypes[] = [
   HandlerTypes.DELETE,
 ];
 
-export const DEFAULT_METHODS_OF_MODELS: string[] = [
-  "constructor",
-  "hasMany",
-  "hasOne",
-  "belongsTo",
-  "__defineGetter__",
-  "__defineSetter__",
-  "hasOwnProperty",
-  "__lookupGetter__",
-  "__lookupSetter__",
-  "isPrototypeOf",
-  "propertyIsEnumerable",
-  "toString",
-  "valueOf",
-  "toLocaleString",
-  "primaryKey",
-  "table",
-  "fillable",
-  "validations",
-  "handlers",
-  "middlewares",
-  "hiddens",
-  "createdAtColumn",
-  "updatedAtColumn",
-  "deletedAtColumn",
-  "transaction",
-  "ignore",
-  "limits",
-  "getFillableFields",
-  "getValidationRules",
-  "cache",
-  "search",
-  "getSearchQuery",
-];
+export const RESERVED_MODEL_MEMBERS = new Set(
+  Object.getOwnPropertyNames(Model.prototype),
+);
 
 export const API_ROUTE_TEMPLATES = {
   [HandlerTypes.INSERT]: (
@@ -412,6 +382,6 @@ export const ALL_HANDLERS = [
   HandlerTypes.UPDATE,
 ];
 
-export const DEFAULT_HASH_MANY_OPTIONS: IHasManyOptions = {
+export const DEFAULT_HAS_MANY_OPTIONS: IHasManyOptions = {
   autoRouting: true,
 };

@@ -79,6 +79,7 @@ export enum HttpMethods {
 export enum Relationships {
   HAS_ONE = "HAS_ONE",
   HAS_MANY = "HAS_MANY",
+  BELONGS_TO = "BELONGS_TO",
 }
 
 export enum SortTypes {
