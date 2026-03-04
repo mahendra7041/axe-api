@@ -1,67 +1,72 @@
 import { DependencyTypes } from "../Enums";
 import { IDependency } from "../Interfaces";
 
+type ClassConstructor = new (...args: any[]) => any;
+type IoCKey = ClassConstructor | string;
+type FactoryCallback<T = any> = () => T | Promise<T>;
+
 class IoCService {
-  private static items: Record<string, IDependency> = {};
+  private static items: Map<IoCKey, IDependency> = new Map();
 
   /**
    * Adding a dependency creator function.
    *
-   * @param name
+   * @param target
    * @param callback
    * @example
    *
-   * IoCService.bind("MailService", () => new MyMailService())
+   * IoCService.bind(MailService, () => new MyMailService())
    */
-  static bind(name: string, callback: any) {
-    this._add(DependencyTypes.BIND, name, callback);
+  static bind<T>(target: IoCKey, callback: FactoryCallback<T>) {
+    this._add(DependencyTypes.BIND, target, callback);
   }
 
   /**
    * Adding a singleton dependency creator function.
    *
-   * @param name
+   * @param target
    * @param callback
    * @example
    *
-   * IoCService.singleton("MySingleton", () => new MySingleton())
+   * IoCService.singleton(MySingleton, () => new MySingleton())
    */
-  static singleton(name: string, callback: any) {
-    this._add(DependencyTypes.SINGLETON, name, callback);
+  static singleton<T>(target: IoCKey, callback: FactoryCallback<T>) {
+    this._add(DependencyTypes.SINGLETON, target, callback);
   }
 
   /**
    * Adding a singleton dependency and create the first instance immediately.
    *
-   * @param name
+   * @param target
    * @param callback
    * @example
    *
-   * IoCService.singleton("MySingleton", () => new MySingleton())
+   * IoCService.fastSingleton(MySingleton, () => new MySingleton())
    */
-  static fastSingleton(name: string, callback: any) {
-    this._add(DependencyTypes.SINGLETON, name, callback);
-    this.use(name);
+  static async fastSingleton<T>(target: IoCKey, callback: FactoryCallback<T>) {
+    this._add(DependencyTypes.SINGLETON, target, callback);
+    await this.use(target);
   }
 
   /**
-   * Getting the service by the name.
+   * Getting the service by the class.
    *
-   * @param name
-   * @param callback
+   * @param target
    * @example
    *
-   * await IoCService.use<MySingleton>("MySingleton")
+   * await IoCService.use<MySingleton>(MySingleton)
    */
-  static async use<T>(name: string): Promise<T> {
-    const result = await IoCService.getByName(name);
+  static async use<T>(target: IoCKey): Promise<T> {
+    const result = await IoCService.getByTarget(target);
     return result as T;
   }
 
-  private static async getByName(name: string): Promise<any> {
-    const item = IoCService.items[name];
+  private static async getByTarget(target: IoCKey): Promise<any> {
+    const item = IoCService.items.get(target);
     if (!item) {
-      throw new Error(`Dependency is not found ${name}`);
+      throw new Error(
+        `Dependency is not found: ${typeof target === "string" ? target : target.name}`,
+      );
     }
 
     if (item.type === DependencyTypes.BIND) {
@@ -76,12 +81,16 @@ class IoCService {
     return item.instance;
   }
 
-  private static _add(type: DependencyTypes, name: string, callback: any) {
-    IoCService.items[name] = {
+  private static _add(
+    type: DependencyTypes,
+    target: IoCKey,
+    callback: FactoryCallback,
+  ) {
+    IoCService.items.set(target, {
       type,
       callback,
-      instance: null,
-    };
+      instance: undefined,
+    });
   }
 }
 
