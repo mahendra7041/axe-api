@@ -1,14 +1,16 @@
-import { Client, ClientOptions } from "@elastic/elasticsearch";
+import { Client } from "@elastic/elasticsearch";
 import LogService from "./LogService";
 import { ISearchConfigutation } from "src/Interfaces";
+import { AppLoader } from "src/AppLoader";
 
 class ElasticService {
   private config: ISearchConfigutation;
   private client: Client;
 
-  constructor(config: ISearchConfigutation, options: ClientOptions) {
-    this.config = config;
-    this.client = new Client(options);
+  constructor() {
+    const appLoader = AppLoader.getInstance();
+    this.config = appLoader.map.config?.search ?? {};
+    this.client = new Client(appLoader.map.config?.elasticSearch ?? {});
     LogService.debug("Elasticsearch connection has been completed.");
   }
 

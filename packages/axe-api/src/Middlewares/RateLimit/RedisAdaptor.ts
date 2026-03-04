@@ -1,18 +1,19 @@
 import { createClient } from "redis";
 import { ICacheAdaptor } from "../../Interfaces";
 import { LogService } from "../../Services";
+import { AppLoader } from "src/AppLoader";
 
 type RedisClientType = ReturnType<typeof createClient>;
-type RedisClientOptions = Parameters<typeof createClient>[0];
 
 class RedisAdaptor implements ICacheAdaptor {
   private client: RedisClientType;
-  private prefix: string;
+  private prefix: string = "";
   private isConnected: boolean;
 
-  constructor(options: RedisClientOptions | undefined, prefix: string) {
+  constructor() {
+    const appLoader = AppLoader.getInstance();
+    const options = appLoader.map.config?.redis || {};
     this.client = createClient(options);
-    this.prefix = prefix;
     this.isConnected = false;
   }
 
@@ -47,7 +48,7 @@ class RedisAdaptor implements ICacheAdaptor {
     });
   }
 
-  async getTagMemebers(tag: string) {
+  async getTagMembers(tag: string) {
     return await this.client.sMembers(tag);
   }
 

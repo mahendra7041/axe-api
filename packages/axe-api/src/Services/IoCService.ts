@@ -43,9 +43,10 @@ class IoCService {
    *
    * IoCService.fastSingleton(MySingleton, () => new MySingleton())
    */
-  static async fastSingleton<T>(target: IoCKey, callback: FactoryCallback<T>) {
+  static fastSingleton<T>(target: IoCKey, callback: FactoryCallback<T>) {
     this._add(DependencyTypes.SINGLETON, target, callback);
-    await this.use(target);
+    const result = this.use<T>(target);
+    if (result instanceof Promise) return result;
   }
 
   /**
@@ -54,14 +55,17 @@ class IoCService {
    * @param target
    * @example
    *
-   * await IoCService.use<MySingleton>(MySingleton)
+   * // sync callback
+   * const db = IoCService.use<Database>(Database);
+   *
+   * // async callback
+   * const db = await IoCService.use<Database>(Database);
    */
-  static async use<T>(target: IoCKey): Promise<T> {
-    const result = await IoCService.getByTarget(target);
-    return result as T;
+  static use<T>(target: IoCKey): T | Promise<T> {
+    return IoCService.getByTarget<T>(target);
   }
 
-  private static async getByTarget(target: IoCKey): Promise<any> {
+  private static getByTarget<T>(target: IoCKey): T | Promise<T> {
     const item = IoCService.items.get(target);
     if (!item) {
       throw new Error(
@@ -70,15 +74,24 @@ class IoCService {
     }
 
     if (item.type === DependencyTypes.BIND) {
-      return await item.callback();
+      return item.callback() as T | Promise<T>;
     }
 
     if (item.instance) {
-      return item.instance;
+      return item.instance as T;
     }
 
-    item.instance = await item.callback();
-    return item.instance;
+    const result = item.callback();
+
+    if (result instanceof Promise) {
+      return result.then((resolved) => {
+        item.instance = resolved;
+        return resolved as T;
+      });
+    }
+
+    item.instance = result;
+    return item.instance as T;
   }
 
   private static _add(
