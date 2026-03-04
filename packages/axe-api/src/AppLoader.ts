@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { DEFAULT_APP_CONFIG, DEFAULT_VERSION_CONFIG } from "./constants";
+import { AxeConfig, AxeVersionConfig } from "./Interfaces";
 
 type LifecycleMethod = (...args: any[]) => any;
 
@@ -154,6 +155,14 @@ export class AppLoader {
 
   getInit(version: string): InitModule | undefined {
     return this.map.versions?.[version]?.init;
+  }
+
+  getConfig(): AxeConfig {
+    return this.map?.config;
+  }
+
+  getVersionConfig(version: string): AxeVersionConfig {
+    return this.map.versions?.[version]?.config;
   }
 
   private async resolveVersion(vPath: string): Promise<VersionEntry> {
