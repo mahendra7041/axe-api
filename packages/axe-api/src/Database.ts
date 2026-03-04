@@ -4,7 +4,7 @@ import { LogService } from "./Services";
 import { attachPaginate } from "knex-paginate";
 
 export default class Database {
-  static create(): knex.Knex {
+  static resolve(): knex.Knex {
     const appLoader = AppLoader.getInstance();
     const database = knex(appLoader.map.config.database);
     attachPaginate();

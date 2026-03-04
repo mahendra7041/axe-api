@@ -1,15 +1,18 @@
 import { AxeConfig, IValidator } from "../Interfaces";
 import Validatorjs from "./Validatorjs";
 import RobustValidator from "./RobustValidator";
-import { APIService } from "../Services";
+import { AppLoader } from "src/AppLoader";
 
 class ValidatorFactory {
-  static resolve(config: AxeConfig): IValidator {
-    const api = APIService.getInstance();
+  static resolve(): IValidator {
+    const appLoader = AppLoader.getInstance();
+    const config = appLoader.map.config as AxeConfig;
 
     const supportedLanguages = [
       ...new Set(
-        api.versions.map((version) => version.config.supportedLanguages).flat(),
+        Object.values(appLoader.map.versions)
+          .map((version) => version.config.supportedLanguages)
+          .flat(),
       ),
     ];
 
