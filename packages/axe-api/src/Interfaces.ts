@@ -505,8 +505,8 @@ export type NestedWhere = Array<NestedWhere | IWhere>;
 
 export interface IDependency {
   type: DependencyTypes;
-  callback: any;
-  instance: any;
+  factory: () => any;
+  instance?: any;
 }
 
 export interface IPhaseDefinition {

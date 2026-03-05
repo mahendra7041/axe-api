@@ -1,7 +1,6 @@
 import pluralize from "pluralize";
 import { snakeCase } from "snake-case";
 import {
-  IRelation,
   IMethodBaseConfig,
   IQueryLimitConfig,
   IHandlerBasedTransactionConfig,
@@ -14,12 +13,22 @@ import { Relationships, HandlerTypes, HttpMethods } from "./Enums";
 import { DEFAULT_HANDLERS, RESERVED_MODEL_MEMBERS } from "./constants";
 import { ModelMiddleware, AxeFunction, ModelValidation } from "./Types";
 import { getParentIndexQuery } from "./Handlers/Helpers";
-import { BelongsTo, HasMany, HasOne } from "./Relations";
+import { BelongsTo, HasMany, HasOne, Relation } from "./Relations";
 import { IoCService } from "./Services";
+import SchemaInspector from "./SchemaInspector";
+import { ModelValidator } from "./ModelValidator";
+
 class Model {
   private _table?: string;
   private _foreignKey?: string;
-  private _relations?: Record<string, IRelation>;
+  private _relations?: Record<string, Relation>;
+  private schemaInspector: SchemaInspector;
+
+  constructor() {
+    this.schemaInspector = IoCService.use<SchemaInspector>("SchemaInspector");
+    ModelValidator.validate(this, this.schemaInspector.getTable(this.table)!);
+  }
+
   /**
    * The primary key of the model. By default, it is `id`. But you can choose
    * another name like `uuid`.
@@ -283,7 +292,7 @@ class Model {
    *  get search() {
    *    return ["name", "surname", "email"]
    * }
-   * @type {string[] | null>}
+   * @type {string[] | null}
    * @tutorial https://axe-api.com/reference/model-search.html
    */
   get search(): string[] | null {
@@ -306,13 +315,7 @@ class Model {
     foreignKey?: string,
     options?: Partial<IHasManyOptions>,
   ): HasMany {
-    const model = IoCService.use<Model>(relatedModel) as Model;
-    return new HasMany(
-      model,
-      primaryKey ?? this.primaryKey,
-      model.foreignKey ?? foreignKey,
-      options,
-    );
+    return new HasMany(relatedModel, primaryKey, foreignKey, options);
   }
 
   /**
@@ -327,15 +330,10 @@ class Model {
    */
   hasOne(
     relatedModel: string,
-    primaryKey: string,
+    primaryKey?: string,
     foreignKey?: string,
   ): HasOne {
-    const model = IoCService.use<Model>(relatedModel) as Model;
-    return new HasOne(
-      model,
-      primaryKey ?? this.primaryKey,
-      model.foreignKey ?? foreignKey,
-    );
+    return new HasOne(relatedModel, primaryKey, foreignKey);
   }
 
   /**
@@ -350,15 +348,10 @@ class Model {
    */
   belongsTo(
     relatedModel: string,
-    primaryKey: string,
-    foreignKey: string,
+    primaryKey?: string,
+    foreignKey?: string,
   ): BelongsTo {
-    const model = IoCService.use<Model>(relatedModel) as Model;
-    return new BelongsTo(
-      model,
-      primaryKey ?? this.primaryKey,
-      foreignKey ?? model.foreignKey,
-    );
+    return new BelongsTo(relatedModel, primaryKey, foreignKey);
   }
 
   getFillableFields(methodType: HttpMethods): string[] {
@@ -412,12 +405,12 @@ class Model {
     });
   }
 
-  getRelations(): Record<string, IRelation> {
+  getRelations(): Record<string, Relation> {
     if (this._relations) {
       return this._relations;
     }
 
-    const relations: Record<string, IRelation> = {};
+    const relations: Record<string, Relation> = {};
 
     const proto = Object.getPrototypeOf(this);
     const propertyNames = Object.getOwnPropertyNames(proto);

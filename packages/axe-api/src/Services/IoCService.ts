@@ -1,109 +1,115 @@
 import { DependencyTypes } from "../Enums";
 import { IDependency } from "../Interfaces";
 
-type ClassConstructor = new (...args: any[]) => any;
+type ClassConstructor<T = any> = new (...args: any[]) => T;
 type IoCKey = ClassConstructor | string;
-type FactoryCallback<T = any> = () => T | Promise<T>;
+
+type SyncFactory<T> = () => T;
+type AsyncFactory<T> = () => Promise<T>;
+type Factory<T> = SyncFactory<T> | AsyncFactory<T>;
 
 class IoCService {
   private static items: Map<IoCKey, IDependency> = new Map();
 
   /**
-   * Adding a dependency creator function.
-   *
-   * @param target
-   * @param callback
-   * @example
-   *
-   * IoCService.bind(MailService, () => new MyMailService())
+   * Register a transient dependency
    */
-  static bind<T>(target: IoCKey, callback: FactoryCallback<T>) {
-    this._add(DependencyTypes.BIND, target, callback);
+  static bind<T>(target: IoCKey, factory: Factory<T>) {
+    this.add(DependencyTypes.BIND, target, factory);
   }
 
   /**
-   * Adding a singleton dependency creator function.
-   *
-   * @param target
-   * @param callback
-   * @example
-   *
-   * IoCService.singleton(MySingleton, () => new MySingleton())
+   * Register a singleton dependency
    */
-  static singleton<T>(target: IoCKey, callback: FactoryCallback<T>) {
-    this._add(DependencyTypes.SINGLETON, target, callback);
+  static singleton<T>(target: IoCKey, factory: Factory<T>) {
+    this.add(DependencyTypes.SINGLETON, target, factory);
   }
 
   /**
-   * Adding a singleton dependency and create the first instance immediately.
-   *
-   * @param target
-   * @param callback
-   * @example
-   *
-   * IoCService.fastSingleton(MySingleton, () => new MySingleton())
+   * Register and immediately create singleton
    */
-  static fastSingleton<T>(target: IoCKey, callback: FactoryCallback<T>) {
-    this._add(DependencyTypes.SINGLETON, target, callback);
-    const result = this.use<T>(target);
-    if (result instanceof Promise) return result;
+  static async fastSingleton<T>(target: IoCKey, factory: Factory<T>) {
+    this.add(DependencyTypes.SINGLETON, target, factory);
+    await this.useAsync<T>(target);
   }
 
   /**
-   * Getting the service by the class.
-   *
-   * @param target
-   * @example
-   *
-   * // sync callback
-   * const db = IoCService.use<Database>(Database);
-   *
-   * // async callback
-   * const db = await IoCService.use<Database>(Database);
+   * Resolve synchronous dependency
    */
-  static use<T>(target: IoCKey): T | Promise<T> {
-    return IoCService.getByTarget<T>(target);
-  }
+  static use<T>(target: IoCKey): T {
+    const result = this.resolve(target);
 
-  private static getByTarget<T>(target: IoCKey): T | Promise<T> {
-    const item = IoCService.items.get(target);
-    if (!item) {
+    if (result instanceof Promise) {
       throw new Error(
-        `Dependency is not found: ${typeof target === "string" ? target : target.name}`,
+        `Dependency "${this.getName(target)}" is async. Use IoCService.useAsync().`,
       );
     }
 
-    if (item.type === DependencyTypes.BIND) {
-      return item.callback() as T | Promise<T>;
+    return result as T;
+  }
+
+  /**
+   * Resolve async dependency
+   */
+  static async useAsync<T>(target: IoCKey): Promise<T> {
+    const result = this.resolve(target);
+    return await result;
+  }
+
+  /**
+   * Core resolver
+   */
+  private static resolve<T>(target: IoCKey): T | Promise<T> {
+    const dependency = this.items.get(target);
+
+    if (!dependency) {
+      throw new Error(`Dependency not found: ${this.getName(target)}`);
     }
 
-    if (item.instance) {
-      return item.instance as T;
+    // Transient dependency
+    if (dependency.type === DependencyTypes.BIND) {
+      return dependency.factory();
     }
 
-    const result = item.callback();
+    // Return cached singleton
+    if (dependency.instance !== undefined) {
+      return dependency.instance;
+    }
 
+    const result = dependency.factory();
+
+    // Handle async singleton
     if (result instanceof Promise) {
       return result.then((resolved) => {
-        item.instance = resolved;
-        return resolved as T;
+        dependency.instance = resolved;
+        return resolved;
       });
     }
 
-    item.instance = result;
-    return item.instance as T;
+    dependency.instance = result;
+    return result;
   }
 
-  private static _add(
+  /**
+   * Add dependency
+   */
+  private static add<T>(
     type: DependencyTypes,
     target: IoCKey,
-    callback: FactoryCallback,
+    factory: Factory<T>,
   ) {
-    IoCService.items.set(target, {
+    this.items.set(target, {
       type,
-      callback,
+      factory,
       instance: undefined,
     });
+  }
+
+  /**
+   * Get readable name
+   */
+  private static getName(target: IoCKey) {
+    return typeof target === "string" ? target : target.name;
   }
 }
 
