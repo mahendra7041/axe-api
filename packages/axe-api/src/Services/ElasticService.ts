@@ -1,7 +1,7 @@
 import { Client } from "@elastic/elasticsearch";
 import LogService from "./LogService";
 import { ISearchConfigutation } from "src/Interfaces";
-import { AppLoader } from "src/AppLoader";
+import { AppLoader } from "../AppLoader";
 
 class ElasticService {
   private config: ISearchConfigutation;

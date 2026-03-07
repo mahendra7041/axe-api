@@ -8,10 +8,10 @@ import { GeneralFunction } from "../Types";
 import URLService from "./URLService";
 import LogService from "./LogService";
 import { setupRateLimitAdaptors } from "../Middlewares/RateLimit";
-import APIService from "./APIService";
 import { resolveMiddlewares } from "./ConverterService";
 import DocumentationService from "./DocumentationService";
 import { HttpMethods } from "../Enums";
+import { AppLoader } from "../AppLoader";
 
 class App {
   private connect: connect.Server;
@@ -26,8 +26,8 @@ class App {
     LogService.debug("New middleware: bodyParser()");
 
     // Activate the Rate Limit middleware
-    const api = APIService.getInstance();
-    setupRateLimitAdaptors(api.config);
+    const appLoader = AppLoader.getInstance();
+    setupRateLimitAdaptors(appLoader.map.config);
   }
 
   /**

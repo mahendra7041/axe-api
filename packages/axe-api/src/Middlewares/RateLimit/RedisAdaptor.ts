@@ -1,7 +1,7 @@
 import { createClient } from "redis";
 import { ICacheAdaptor } from "../../Interfaces";
 import { LogService } from "../../Services";
-import { AppLoader } from "src/AppLoader";
+import { AppLoader } from "../../AppLoader";
 
 type RedisClientType = ReturnType<typeof createClient>;
 

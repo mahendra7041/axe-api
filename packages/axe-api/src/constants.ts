@@ -132,7 +132,7 @@ export const ConditionQueryFeatureMap: Record<ConditionTypes, QueryFeature> = {
   [ConditionTypes["NotBetween"]]: QueryFeature.WhereNotBetween,
 };
 
-export const RelationQueryFeatureMap: Record<Relationships, QueryFeature> = {
+export const RelationQueryFeatureMap: Record<string, QueryFeature> = {
   [Relationships.HAS_ONE]: QueryFeature.WithHasOne,
   [Relationships.HAS_MANY]: QueryFeature.WithHasMany,
 };

@@ -1,4 +1,4 @@
-import { promises as fs } from "fs";
+import fs from "fs/promises";
 import path from "path";
 import { DEFAULT_APP_CONFIG, DEFAULT_VERSION_CONFIG } from "./constants";
 import { AxeConfig, AxeVersionConfig } from "./Interfaces";

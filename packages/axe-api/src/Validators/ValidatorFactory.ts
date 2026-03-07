@@ -1,7 +1,7 @@
 import { AxeConfig, IValidator } from "../Interfaces";
 import Validatorjs from "./Validatorjs";
 import RobustValidator from "./RobustValidator";
-import { AppLoader } from "src/AppLoader";
+import { AppLoader } from "../AppLoader";
 
 class ValidatorFactory {
   static resolve(): IValidator {

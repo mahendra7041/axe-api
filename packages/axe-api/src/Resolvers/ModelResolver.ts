@@ -14,7 +14,7 @@ import {
   ModelListService,
   APIService,
 } from "../Services";
-import { ALL_HANDLERS, DEFAULT_METHODS_OF_MODELS } from "../constants";
+import { ALL_HANDLERS, RESERVED_MODEL_MEMBERS } from "../constants";
 import { SchemaInspectorFunction, SerializationFunction } from "../Types";
 import AxeError from "../Exceptions/AxeError";
 import { getModelCacheConfiguration } from "../Handlers/Helpers";
@@ -333,9 +333,7 @@ class ModelResolver {
     const properties: string[] = Object.getOwnPropertyNames(
       obj.instance.constructor.prototype,
     );
-    return properties.filter(
-      (name) => !DEFAULT_METHODS_OF_MODELS.includes(name),
-    );
+    return properties.filter((name) => !RESERVED_MODEL_MEMBERS.has(name));
   }
 }
 

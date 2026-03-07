@@ -52,7 +52,7 @@ class IoCService {
    * Resolve async dependency
    */
   static async useAsync<T>(target: IoCKey): Promise<T> {
-    const result = this.resolve(target);
+    const result = this.resolve<T>(target);
     return await result;
   }
 

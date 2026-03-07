@@ -587,7 +587,7 @@ export const deleteCacheTagMembers = async (key: string) => {
     return;
   }
 
-  const members = await redis.getTagMemebers(key);
+  const members = await redis.getTagMembers(key);
   await redis.delete(members);
 };
 
@@ -617,7 +617,7 @@ export const clearCacheTags = async (tag: string) => {
     return;
   }
 
-  const members = await redis.getTagMemebers(tag);
+  const members = await redis.getTagMembers(tag);
   if (members.length > 0) {
     await redis.delete(members);
   }
