@@ -1,67 +1,100 @@
 import { Relationships } from "../Enums";
-import { IModelService, IVersion } from "../Interfaces";
 import { LogService } from "../Services";
+import { VersionEntry, ModelEntry } from "../AppLoader";
+import { Relation } from "../Relations";
+import Model from "../Model";
 
 class ModelTreeBuilder {
-  private version: IVersion;
+  private versionName: string;
+  private versionEntry: VersionEntry;
 
-  constructor(version: IVersion) {
-    this.version = version;
+  constructor(versionName: string, versionEntry: VersionEntry) {
+    this.versionName = versionName;
+    this.versionEntry = versionEntry;
   }
 
-  async build() {
-    const tree = this.getRootLevelOfTree();
-    this.createRecursiveTree(tree);
-    this.addNestedRoutes(tree);
-    this.version.modelTree = tree;
-    LogService.debug(`[${this.version.name}] Model tree has been created.`);
+  build() {
+    const rootNames = this.getRootLevelOfTree();
+    this.createRecursiveTree(rootNames);
+    this.addNestedRoutes(rootNames);
+    this.versionEntry.modelTree = rootNames;
+    LogService.debug(`[${this.versionName}] Model tree has been created.`);
   }
 
-  private getRootLevelOfTree(): IModelService[] {
-    const childModels: string[] = [];
-    this.version.modelList.get().forEach((model) => {
-      childModels.push(
-        ...model.relations
-          .filter((relation) => relation.type === Relationships.HAS_MANY)
-          .map((relation) => relation.model),
-      );
-    });
-
-    return this.version.modelList
-      .get()
-      .filter((model) => !childModels.includes(model.name));
+  private getRelationsArray(
+    modelInstance: Model,
+  ): { name: string; type: Relationships; modelName: string; options: any }[] {
+    const relationsMap: Record<string, Relation> =
+      modelInstance.getRelations();
+    return Object.entries(relationsMap).map(([name, relation]) => ({
+      name,
+      type: relation.type,
+      modelName: relation.modelName,
+      options: (relation as any).options ?? { autoRouting: true },
+    }));
   }
 
-  private createRecursiveTree(tree: IModelService[]) {
-    for (const model of tree) {
-      this.setChildrens(model);
+  private getRootLevelOfTree(): string[] {
+    const childModelNames = new Set<string>();
+    const models = this.versionEntry.models;
+
+    for (const modelName in models) {
+      const entry = models[modelName];
+      const model: Model = entry.model;
+      const relations = this.getRelationsArray(model);
+
+      for (const relation of relations) {
+        if (relation.type === Relationships.HAS_MANY) {
+          childModelNames.add(relation.modelName);
+        }
+      }
+    }
+
+    return Object.keys(models).filter(
+      (name) => !childModelNames.has(name),
+    );
+  }
+
+  private createRecursiveTree(rootNames: string[]) {
+    for (const name of rootNames) {
+      this.setChildren(name);
     }
   }
 
-  private setChildrens(model: IModelService) {
-    const childModelNames = this.getChildModelNames(model);
-    model.children = this.version.modelList
-      .get()
-      .filter((item) => childModelNames.includes(item.name));
-    for (const child of model.children) {
-      this.setChildrens(child);
+  private setChildren(modelName: string) {
+    const entry = this.versionEntry.models[modelName];
+    if (!entry) return;
+
+    const childNames = this.getChildModelNames(entry);
+    entry.children = childNames;
+
+    for (const childName of childNames) {
+      this.setChildren(childName);
     }
   }
 
-  private getChildModelNames(model: IModelService): string[] {
-    return model.relations
+  private getChildModelNames(entry: ModelEntry): string[] {
+    const model: Model = entry.model;
+    const relations = this.getRelationsArray(model);
+
+    return relations
       .filter(
         (item) =>
-          item.type === Relationships.HAS_MANY && item.options.autoRouting,
+          item.type === Relationships.HAS_MANY && item.options?.autoRouting,
       )
-      .map((item) => item.model);
+      .map((item) => item.modelName);
   }
 
-  private addNestedRoutes(tree: IModelService[]) {
-    // We should add recursive models
-    this.version.modelList.get().forEach((model) => {
-      const recursiveRelations = model.relations.filter(
-        (relation) => relation.model === model.name,
+  private addNestedRoutes(tree: string[]) {
+    const models = this.versionEntry.models;
+
+    for (const modelName in models) {
+      const entry = models[modelName];
+      const model: Model = entry.model;
+      const relations = this.getRelationsArray(model);
+
+      const recursiveRelations = relations.filter(
+        (relation) => relation.modelName === modelName,
       );
 
       const hasManyCount = recursiveRelations.filter(
@@ -77,10 +110,10 @@ class ModelTreeBuilder {
         hasManyCount === 1 &&
         hasOneCount === 1
       ) {
-        model.setAsRecursive();
-        tree.push(model);
+        entry.isRecursive = true;
+        tree.push(modelName);
       }
-    });
+    }
   }
 }
 

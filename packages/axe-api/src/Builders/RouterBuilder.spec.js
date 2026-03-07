@@ -5,14 +5,6 @@ import { API_ROUTE_TEMPLATES } from "../constants";
 import { LogService, IoCService, DocumentationService } from "../Services";
 import URLService from "../Services/URLService";
 
-vi.mock("../Resolvers/GeneralHookResolver", () => ({
-  default: vi.fn().mockImplementation(() => ({
-    resolve: vi
-      .fn()
-      .mockResolvedValue({ onBeforeInit: null, onAfterInit: null }),
-  })),
-}));
-
 vi.mock("../Services", () => ({
   LogService: {
     debug: vi.fn(),
@@ -38,33 +30,39 @@ vi.mock("../Services/URLService", () => ({
   },
 }));
 
-const createModel = ({
+const createModelInstance = ({
   name,
   handlers = [],
   ignore = false,
-  children = [],
-  isRecursive = false,
-  relations = [],
+  relations = {},
 }) => ({
   name,
-  instance: {
-    ignore,
-    primaryKey: "id",
-    handlers,
-    getMiddlewares: () => [],
-  },
-  children,
-  isRecursive,
-  relations,
+  ignore,
+  primaryKey: "id",
+  foreignKey: `${name.toLowerCase()}_id`,
+  handlers,
+  getMiddlewares: () => [],
+  getRelations: () => relations,
 });
 
-const createVersion = (models) => ({
-  name: "v1",
-  modelTree: models,
+const createModelEntry = (modelInstance, { children = [], isRecursive = false } = {}) => ({
+  model: modelInstance,
+  serialization: null,
+  hooks: {},
+  events: {},
+  children,
+  isRecursive,
+});
+
+const createVersionEntry = (modelsMap, modelTree = []) => ({
+  config: null,
+  init: { onBeforeInit: null, onAfterInit: null },
+  models: modelsMap,
+  modelTree,
 });
 
 describe("RouterBuilder", () => {
-  let version;
+  let versionEntry;
   let builder;
 
   beforeEach(() => {
@@ -76,10 +74,11 @@ describe("RouterBuilder", () => {
 
   it("builds routes for models with appropriate handlers", async () => {
     const handlers = Object.keys(API_ROUTE_TEMPLATES);
-    const model = createModel({ name: "Post", handlers });
+    const modelInstance = createModelInstance({ name: "Post", handlers });
+    const entry = createModelEntry(modelInstance);
 
-    version = createVersion([model]);
-    builder = new RouterBuilder(version);
+    versionEntry = createVersionEntry({ Post: entry }, ["Post"]);
+    builder = new RouterBuilder("v1", versionEntry);
 
     await builder.build();
 
@@ -90,14 +89,15 @@ describe("RouterBuilder", () => {
   });
 
   it("skips models marked with ignore", async () => {
-    const model = createModel({
+    const modelInstance = createModelInstance({
       name: "SecretModel",
       ignore: true,
       handlers: [HandlerTypes.GET],
     });
+    const entry = createModelEntry(modelInstance);
 
-    version = createVersion([model]);
-    builder = new RouterBuilder(version);
+    versionEntry = createVersionEntry({ SecretModel: entry }, ["SecretModel"]);
+    builder = new RouterBuilder("v1", versionEntry);
 
     await builder.build();
 

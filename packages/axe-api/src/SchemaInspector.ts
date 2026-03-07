@@ -1,4 +1,3 @@
-import Database from "./Database";
 import schemaInspector from "knex-schema-inspector";
 import { IoCService } from "./Services";
 import type { Knex } from "knex";
@@ -25,10 +24,10 @@ type DatabaseSchema = Record<string, TableSchema>;
 
 export default class SchemaInspector {
   private inspector: ReturnType<typeof schemaInspector>;
-  private schema: Record<string, TableSchema> = {};
+  private schema?: Record<string, TableSchema>;
 
   constructor() {
-    const database = IoCService.use<Knex>(Database);
+    const database = IoCService.use<Knex>("Database");
     this.inspector = schemaInspector(database);
     this.load().catch(console.error);
   }
@@ -46,11 +45,12 @@ export default class SchemaInspector {
   }
 
   public hasTable(tableName: string): boolean {
+    if (!this.schema) return false;
     return tableName in this.schema;
   }
 
   public getTable(tableName: string): TableSchema | undefined {
-    return this.schema[tableName];
+    return this.schema?.[tableName];
   }
 
   /**

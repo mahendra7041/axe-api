@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { DEFAULT_APP_CONFIG, DEFAULT_VERSION_CONFIG } from "./constants";
 import { AxeConfig, AxeVersionConfig } from "./Interfaces";
+import Model from "./Model";
 
 type LifecycleMethod = (...args: any[]) => any;
 
@@ -42,20 +43,24 @@ interface InitModule {
   onAfterInit?: LifecycleMethod;
 }
 
-interface ModelEntry {
-  model: any | null;
+export interface ModelEntry {
+  model: any;
   serialization: any | null;
   hooks: LifecycleMap;
   events: LifecycleMap;
+  children: string[];
+  isRecursive: boolean;
 }
 
-interface VersionEntry {
+export interface VersionEntry {
   config: any | null;
   init: InitModule;
   models: Record<string, ModelEntry>;
+  modelTree: string[];
 }
 
 export interface AppMap {
+  rootFolder: string;
   config: any;
   versions: Record<string, VersionEntry>;
 }
@@ -93,6 +98,7 @@ function defaultExport(mod: any): any {
 export class AppLoader {
   private static instance: AppLoader | null = null;
   public map: AppMap = {
+    rootFolder: "",
     config: { ...DEFAULT_APP_CONFIG },
     versions: {},
   };
@@ -112,8 +118,8 @@ export class AppLoader {
 
     const rootConfigPath = await resolveFile(absRoot, "config");
     const rootConfigMod = await safeImport(rootConfigPath);
-
     const map: AppMap = {
+      rootFolder: absRoot,
       config: { ...DEFAULT_APP_CONFIG, ...defaultExport(rootConfigMod) },
       versions: {},
     };
@@ -184,6 +190,7 @@ export class AppLoader {
       config: { ...DEFAULT_VERSION_CONFIG, ...defaultExport(configMod) },
       init,
       models,
+      modelTree: [],
     };
   }
 
@@ -234,6 +241,8 @@ export class AppLoader {
       serialization: defaultExport(serMod),
       hooks,
       events,
+      children: [],
+      isRecursive: false,
     };
   }
 

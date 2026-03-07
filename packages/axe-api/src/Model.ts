@@ -22,11 +22,11 @@ class Model {
   private _table?: string;
   private _foreignKey?: string;
   private _relations?: Record<string, Relation>;
-  private schemaInspector: SchemaInspector;
 
   constructor() {
-    this.schemaInspector = IoCService.use<SchemaInspector>("SchemaInspector");
-    ModelValidator.validate(this, this.schemaInspector.getTable(this.table)!);
+    IoCService.useAsync<SchemaInspector>("SchemaInspector").then((si) => {
+      ModelValidator.validate(this, si.getTable(this.table)!);
+    });
   }
 
   /**

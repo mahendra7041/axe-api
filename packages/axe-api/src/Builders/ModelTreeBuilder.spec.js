@@ -9,73 +9,89 @@ vi.mock("../Services", () => ({
   },
 }));
 
-const createModel = ({ name, relations = [] }) => ({
+const createModelInstance = ({ name, relations = {} }) => ({
   name,
-  relations,
-  children: [],
-  setAsRecursive: vi.fn(),
+  getRelations: () => relations,
 });
 
-const createRelation = (type, model, autoRouting = true) => ({
+const createRelation = (type, modelName, autoRouting = true) => ({
   type,
-  model,
+  modelName,
   options: { autoRouting },
 });
 
-const createVersion = (models) => ({
-  name: "v1",
-  modelList: {
-    get: () => models,
-  },
-  modelTree: null,
+const createVersionEntry = (modelsMap) => ({
+  config: null,
+  init: {},
+  models: modelsMap,
+  modelTree: [],
+});
+
+const createModelEntry = (modelInstance) => ({
+  model: modelInstance,
+  serialization: null,
+  hooks: {},
+  events: {},
+  children: [],
+  isRecursive: false,
 });
 
 describe("ModelTreeBuilder", () => {
-  let version;
+  let versionEntry;
   let builder;
 
   beforeEach(() => {
-    version = createVersion([]);
-    builder = new ModelTreeBuilder(version);
+    versionEntry = createVersionEntry({});
+    builder = new ModelTreeBuilder("v1", versionEntry);
   });
 
-  it("should build a model tree with correct root nodes and structure", async () => {
-    const parent = createModel({ name: "Parent" });
-    const child = createModel({
+  it("should build a model tree with correct root nodes and structure", () => {
+    const parentInstance = createModelInstance({
+      name: "Parent",
+      relations: {
+        childOfParent: createRelation(Relationships.HAS_MANY, "ChildOfParent"),
+      },
+    });
+    const childInstance = createModelInstance({
       name: "Child",
-      relations: [
-        createRelation(Relationships.HAS_ONE, "Child"),
-        createRelation(Relationships.HAS_MANY, "Child"),
-      ],
+      relations: {
+        selfHasOne: createRelation(Relationships.HAS_ONE, "Child"),
+        selfHasMany: createRelation(Relationships.HAS_MANY, "Child"),
+      },
     });
-    const childOfParent = createModel({
+    const childOfParentInstance = createModelInstance({
       name: "ChildOfParent",
-      relations: [createRelation(Relationships.HAS_MANY, "GrandChild", true)],
+      relations: {
+        grandChild: createRelation(Relationships.HAS_MANY, "GrandChild", true),
+      },
     });
-    const grandChild = createModel({
+    const grandChildInstance = createModelInstance({
       name: "GrandChild",
-      relations: [],
+      relations: {},
     });
 
-    parent.relations = [
-      createRelation(Relationships.HAS_MANY, "ChildOfParent"),
-    ];
+    versionEntry = createVersionEntry({
+      Parent: createModelEntry(parentInstance),
+      Child: createModelEntry(childInstance),
+      ChildOfParent: createModelEntry(childOfParentInstance),
+      GrandChild: createModelEntry(grandChildInstance),
+    });
 
-    version = createVersion([parent, child, childOfParent, grandChild]);
-    builder = new ModelTreeBuilder(version);
+    builder = new ModelTreeBuilder("v1", versionEntry);
+    builder.build();
 
-    await builder.build();
-
-    // Root node should be `parent`
-    expect(version.modelTree).toContain(parent);
+    // Root nodes should be "Parent" (and "Child" added as recursive)
+    expect(versionEntry.modelTree).toContain("Parent");
 
     // Should attach children recursively
-    expect(parent.children[0]).toBe(childOfParent);
-    expect(childOfParent.children[0]).toBe(grandChild);
+    expect(versionEntry.models["Parent"].children).toContain("ChildOfParent");
+    expect(versionEntry.models["ChildOfParent"].children).toContain(
+      "GrandChild",
+    );
 
     // Recursive model handling
-    expect(child.setAsRecursive).toHaveBeenCalled();
-    expect(version.modelTree).toContain(child);
+    expect(versionEntry.models["Child"].isRecursive).toBe(true);
+    expect(versionEntry.modelTree).toContain("Child");
 
     // Logging
     expect(LogService.debug).toHaveBeenCalledWith(
@@ -83,32 +99,34 @@ describe("ModelTreeBuilder", () => {
     );
   });
 
-  it("should handle case with no models", async () => {
-    version = createVersion([]);
-    builder = new ModelTreeBuilder(version);
+  it("should handle case with no models", () => {
+    versionEntry = createVersionEntry({});
+    builder = new ModelTreeBuilder("v1", versionEntry);
 
-    await builder.build();
+    builder.build();
 
-    expect(version.modelTree).toEqual([]);
+    expect(versionEntry.modelTree).toEqual([]);
     expect(LogService.debug).toHaveBeenCalledWith(
       "[v1] Model tree has been created.",
     );
   });
 
-  it("should not mark non-recursive models as recursive", async () => {
-    const model = createModel({
+  it("should not mark non-recursive models as recursive", () => {
+    const modelInstance = createModelInstance({
       name: "Test",
-      relations: [
-        createRelation(Relationships.HAS_MANY, "Other"),
-        createRelation(Relationships.HAS_MANY, "Another"),
-      ],
+      relations: {
+        other: createRelation(Relationships.HAS_MANY, "Other"),
+        another: createRelation(Relationships.HAS_MANY, "Another"),
+      },
     });
 
-    version = createVersion([model]);
-    builder = new ModelTreeBuilder(version);
+    versionEntry = createVersionEntry({
+      Test: createModelEntry(modelInstance),
+    });
+    builder = new ModelTreeBuilder("v1", versionEntry);
 
-    await builder.build();
+    builder.build();
 
-    expect(model.setAsRecursive).not.toHaveBeenCalled();
+    expect(versionEntry.models["Test"].isRecursive).toBe(false);
   });
 });
